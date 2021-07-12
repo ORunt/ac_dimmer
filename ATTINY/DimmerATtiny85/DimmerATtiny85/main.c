@@ -137,13 +137,22 @@ int main(void)
 	gpio_init();
 	timer_init();
 	exti_init();
+	i2c_init();
 	enableGlobalInterrupts(true);
 	
-	light_store[0].dim_buf = 50;
-	
-    while (1) 
+    while(1)
     {
-		
+	    uint8_t buf[2] = {0};
+
+	    i2c_receive_data(&buf[0]);
+
+		switch (buf[0])
+		{
+			case 0: light_store[0].dim_buf = buf[1]; break;	// Light 1
+			/*case 1: light_store[1].dim_buf = buf[1]; break;	// Light 2
+			case 2: light_store[2].dim_buf = buf[1]; break;	// Light 3*/
+			default: break;
+		}
     }
 }
 

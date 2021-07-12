@@ -176,37 +176,43 @@ void resetPin(uint8_t pin)
 
 // ============== I2C ==============
 
-String received;
-//PB2 - SCL
-//PB0 - SDA
-short int flag;
-short int i=0;
+#define I2C_SCL			PB2
+#define I2C_SDA			PB0
+#define I2C_ADDRESS		0x6A
+#define I2C_BUF_SIZE	4
 
-void initializeI2C()
+#define GET_USISIF		((USISR & _BV(USISIF)) == _BV(USISIF))
+#define GET_USIOIF		((USISR & _BV(USIOIF)) == _BV(USIOIF))
+#define GET_USIPF		((USISR & _BV(USIPF))  == _BV(USIPF))
+
+uint8_t i2c_rec_buff[I2C_BUF_SIZE];
+
+void i2c_init(void)
 {
-	USICR=(1<<USIWM1)|(1<<USICS1)|(1<<USICLK);  // TWI mode
-	DDRB=0x00;									// SDA & SCL direction as input
-	PORTB=0x00;									// SDA & SCL default state
-	USISR=0x00;									// Counter value
+	USICR = _BV(USIWM1)|_BV(USICS1)|_BV(USICLK);	// I2C Slave mode // TODO: what does USICLK do?
+	//DDRB &= ~(_BV(PB2)|_BV(PB0));					// SDA & SCL direction as input
+	//PORTB &= ~(_BV(PB2)|_BV(PB0));				// SDA & SCL default state
+	USISR = 0x00;									// Counter value (counts SCL pulses)
 }
 
 
-void i2c_ack()
+static void i2c_ack(void)
 {
-	DDRB  |= _BV(PB0);		// Set the direction to output
-	USISR |= (1<<USIOIF);	// clear overflow flags
-	PORTB |= _BV(PB0);
+	DDRB  |= _BV(I2C_SDA);	// Set the direction to output	// TODO: Isn't the ACK bit low, not high?
+	USISR |= _BV(USIOIF);	// clear overflow flags
+	PORTB |= _BV(I2C_SDA);
 	while((USISR&0x01)==0); // Wait until counter goes 1
-	PORTB &= ~_BV(PB0);		// Ack bit end
+	PORTB &= ~_BV(I2C_SDA); // Ack bit end
 	USISR &= 0xF0;			// Clear counter bits
 }
 
 
-void i2c_address()
+/*void i2c_address()
 {
 	char usi_data;
-	while(USISIF==0);		// Wait till address bit is received
+	while(USISIF==0);		// Wait for start bit (address bit is received)
 	{
+		// TODO: wait for counter overflow first?
 		usi_data=USIDR;
 		if(usi_data==0x00)  // Verifying the address
 		{
@@ -221,8 +227,45 @@ void receive_data()
 {
 	if((flag==1)&&(USIOIF==1))	// Checked address and counter overflow bits
 	{
-		received[i]=USIDR;		// Received data stored in string
+		i2c_rec_buff[i]=USIDR;		// Received data stored in string
 		i++;
 		USISR|=(1<<USIOIF);		// Clear overflow flag
+		// TODO: send ack?
 	}
+	// TODO: wait for stop bit to terminate data session
+}*/
+
+uint8_t i2c_receive_data(uint8_t * buf)
+{
+	uint8_t usi_data;
+	uint8_t len = 0;
+	buf = &i2c_rec_buff[0];
+	
+	while(GET_USISIF==0);			// Wait for start bit (address bit is received)
+	while(GET_USIOIF==0);			// Wait for counter overflow
+
+	usi_data = USIDR;				// Save data
+	
+	if(usi_data == I2C_ADDRESS)		// Verify I2C address
+	{
+		i2c_ack();					// Send acknowledge bit
+	}
+	else
+	{
+		USISR = 0xF0;				// Clear any bits and set counter back to 0 for next session
+		return 0;					// This message was not for us
+	}
+	
+	// Receive Data loop
+	while(GET_USIPF == 0)			// Continue until we get the stop bit
+	{
+		while(GET_USIOIF==0);		// Wait for counter overflow
+
+		i2c_rec_buff[len++] = USIDR;// Received data stored in buffer
+		USISR |= _BV(USIOIF);		// Clear overflow flag
+		i2c_ack();					// Send acknowledge bit
+	}
+	
+	USISR = 0xF0;					// Clear any bits and set counter back to 0 for next session
+	return len;
 }

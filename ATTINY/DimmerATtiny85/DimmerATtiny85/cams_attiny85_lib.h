@@ -88,6 +88,8 @@ void enableGlobalInterrupts(bool enable);
 void setPinOutput(uint8_t pin);
 void setPin(uint8_t pin);
 void resetPin(uint8_t pin);
+void i2c_init(void);
+uint8_t i2c_receive_data(uint8_t * buf);
 
 
 #endif /* CAMS_ATTINY85_LIB_H_ */
