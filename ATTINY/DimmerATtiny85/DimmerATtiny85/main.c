@@ -17,6 +17,8 @@
 #define LIGHT_PIN_2			2
 #define ZERO_CROSS_PIN		3
 
+#define I2C_PACKET_SIZE		2	// excluding the address
+
 typedef struct{
 	uint8_t zero_cross;		// Set when a zero cross happens
 	uint8_t dim_trans_buf;	// The current dim value
@@ -24,23 +26,16 @@ typedef struct{
 }light_store_t;
 
 volatile light_store_t light_store[LIGHTS] = {0};
-volatile uint8_t cam = 0;
 
 // Dim value between 0 (off) and 100 (max)
 uint8_t Calc_Dim_CCR(uint32_t dim)
 {
-	uint32_t numerator;
-	uint32_t denomiator;
-	uint32_t quotiant;
-	denomiator = (dim < 100) ? dim : 100;
+	dim = (dim < 100) ? dim : 100;
 	// 10ms is max brightness
 	//uint32_t t_cnt_ns = (AC_DIM_PRESCALER + 1) * 1000000000 / SystemCoreClock; // In ns
 	//return dim * 100000 / t_cnt_ns;
-	numerator = ((100 - denomiator) * F_CPU);
-	denomiator = 640000;//((PRESCALER + 1) * 10000);
-	quotiant = numerator / denomiator;
-	return (uint8_t)quotiant & 0xFF;
-	//return (uint8_t)(((100 - dim) * F_CPU) / ((PRESCALER + 1) * 10000));
+
+	return (uint8_t)(((100 - dim) * F_CPU) / (PRESCALER * 10000UL));
 }
 
 uint8_t map_pin(uint8_t pin)
@@ -98,13 +93,6 @@ void isr_zeroCross(uint8_t num)
 	
 	// Start the counter from 0 again
 	ResetAllCounters();
-	
-	
-	/*if(cam)
-		resetPin(LIGHT_PIN_0);
-	else
-		setPin(LIGHT_PIN_0);
-	cam = (cam) ? 0 : 1;*/
 }
 
 void timer_init(void)
@@ -134,31 +122,26 @@ void exti_init(void)
 
 int main(void)
 {
-	//setupSystemClock(CLK_PSC_1);
-	//gpio_init();
-	//timer_init();
-	//exti_init();
-	
-	//setPinOutput(PB3);
-	DDRB = _BV(PB3);
-	PORTB = 0x00;
-	//resetPin(PB3);
+	uint8_t buf[I2C_PACKET_SIZE] = {0};
+		
+	//setupSystemClock(CLK_PSC_1);	// If DIV8 fuse is not removed, then add this line
+	gpio_init();
+	timer_init();
+	exti_init();
 	i2c_init();
-	//enableGlobalInterrupts(true);
+	enableGlobalInterrupts(true);
 	
     while(1)
     {
-	    uint8_t buf[2] = {0};
+	    i2c_receive_data(&buf[0], I2C_PACKET_SIZE);
 
-	    i2c_receive_data(&buf[0]);
-
-		/*switch (buf[0])
+		switch (buf[0])
 		{
 			case 0: light_store[0].dim_buf = buf[1]; break;	// Light 1
-			case 1: light_store[1].dim_buf = buf[1]; break;	// Light 2
-			case 2: light_store[2].dim_buf = buf[1]; break;	// Light 3
+			//case 1: light_store[1].dim_buf = buf[1]; break;	// Light 2
+			//case 2: light_store[2].dim_buf = buf[1]; break;	// Light 3
 			default: break;
-		}*/
+		}
     }
 }
 

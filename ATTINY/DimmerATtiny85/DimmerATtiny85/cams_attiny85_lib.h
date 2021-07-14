@@ -19,8 +19,8 @@ typedef char bool;
 #define false	0
 
 #define SYS_CLK	8000000UL	// 8MHz
-#define F_CPU	1000000UL	// 1MHz
-#define PRESCALER	64
+#define F_CPU	8000000UL	// 8MHz
+#define PRESCALER	1024
 
 // ============== Clock ==============
 typedef enum{
@@ -89,7 +89,7 @@ void setPinOutput(uint8_t pin);
 void setPin(uint8_t pin);
 void resetPin(uint8_t pin);
 void i2c_init(void);
-uint8_t i2c_receive_data(uint8_t * buf);
-
+uint8_t i2c_receive_data(uint8_t * buf, uint8_t size);
+void plotValue(uint8_t val);
 
 #endif /* CAMS_ATTINY85_LIB_H_ */

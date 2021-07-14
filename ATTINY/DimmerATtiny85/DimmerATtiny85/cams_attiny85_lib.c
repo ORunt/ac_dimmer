@@ -66,14 +66,14 @@ void InitialiseTimer(TIMx_e timer, InterruptFunction attach_interrupt)
 		case TIM0_A:
 		case TIM0_B:
 			// set prescaler and start timer
-			TCCR0B |= TIM0_PSC_64;
+			TCCR0B |= TIM0_PSC_1024;
 			// initialize counter
 			TCNT0 = 0;
 			break;
 		case TIM1_A:
 		case TIM1_B:
 			// set prescaler and start timer
-			TCCR1 |= TIM1_PSC_64;
+			TCCR1 |= TIM1_PSC_1024;
 			// initialize counter
 			TCNT1 = 0;
 			break;
@@ -139,20 +139,16 @@ ISR(PCINT0_vect)
 {
 	if(INT_FUNC_ext_pin != NULL)
 	{
-		//int i;
+		int i;
 		uint8_t port_b = PINB;
 		uint8_t pcint = PCMSK;
 
-		/*for(i = 0; i < IO_PINS; i++)
+		for(i = 0; i < IO_PINS; i++)
 		{
 			if((port_b & _BV(i)) && (pcint & _BV(i)))
 			{
 				INT_FUNC_ext_pin(i);
 			}
-		}*/
-		if((port_b & _BV(3)) && (pcint & _BV(3)))
-		{
-			INT_FUNC_ext_pin(3);
 		}
 	}
 }
@@ -179,36 +175,27 @@ void resetPin(uint8_t pin)
 #define I2C_SCL			PB2
 #define I2C_SDA			PB0
 #define I2C_ADDRESS		0x6A
-#define I2C_BUF_SIZE	4
 
 #define GET_USISIF		((USISR & _BV(USISIF)) == _BV(USISIF))
 #define GET_USIOIF		((USISR & _BV(USIOIF)) == _BV(USIOIF))
 #define GET_USIPF		((USISR & _BV(USIPF))  == _BV(USIPF))
 
-#define I2C_ACK_USISR			0x7E	//Counts one clock (ACK)
-#define I2C_BYTE_USISR			0x70	//Counts 8 clocks (BYTE)
-#define I2C_START_USISR			0xF0	//Clears START flag
-#define USI_SLAVE_SET_START_COND_USISR		0x70
-#define USI_SLAVE_SET_START_COND_USICR		0b10101000
-#define USI_SLAVE_STOP_DID_OCCUR_USICR		0b10111000
-#define USI_SLAVE_STOP_NOT_OCCUR_USICR		0b11101000
+#define I2C_SET_SDA_OUTPUT()	{ DDRB |=  _BV(I2C_SDA); }
+#define I2C_SET_SDA_INPUT() 	{ DDRB &= ~_BV(I2C_SDA); }
+#define I2C_SET_BOTH_INPUT() 	{ DDRB &= ~(_BV(I2C_SDA) | _BV(I2C_SCL)); }
 
-uint8_t i2c_rec_buff[I2C_BUF_SIZE];
+#define I2C_ACK_USISR			0x7E	// Counts one clock (ACK)
+#define I2C_BYTE_USISR			0x70	// Counts 8 clocks (BYTE)
+#define I2C_CLR_START_USISR		0xF0	// Clears START flag
+#define I2C_SET_START_USISR		0x70	// Sets START flag
 
 
-static void plotValue(uint8_t val)
+void plotValue(uint8_t val)
 {
 	int i,j;
-	for(i = 0; i < 8; i++)
-	{
-		if(val & _BV(7-i))
-		{
-			PORTB |= _BV(PB3);
-		}
-		else
-		{
-			PORTB &= ~_BV(PB3);
-		}
+	for(i = 0; i < 8; i++){
+		if(val & _BV(7-i)) { PORTB |= _BV(PB3); }
+		else { PORTB &= ~_BV(PB3); }
 		for (j=0; j<10; j++){__asm__("nop");}
 	}
 	PORTB &= ~_BV(PB3);
@@ -217,50 +204,39 @@ static void plotValue(uint8_t val)
 
 void i2c_init(void)
 {
-	USICR = _BV(USIWM1)|_BV(USICS1);	// I2C Slave mode // TODO: what does USICLK do?
-	//DDRB &= ~(_BV(PB2)|_BV(PB0));					// SDA & SCL direction as input
-	//PORTB &= ~(_BV(PB2)|_BV(PB0));				// SDA & SCL default state
-	USISR = 0xE0;									// Counter value (counts SCL pulses)
+	USICR = _BV(USIWM1)|_BV(USICS1);	// I2C Slave mode
+	I2C_SET_BOTH_INPUT() 				// SDA & SCL direction as input
+	USISR = I2C_CLR_START_USISR;		// Counter value (counts SCL pulses)
 }
 
 
 static void i2c_ack(void)
 {
 	USIDR = 0;
-	DDRB  |= _BV(I2C_SDA);			// Set the direction to output
+	I2C_SET_SDA_OUTPUT()			// Set the direction to output
 	PORTB = PINB & ~_BV(I2C_SDA);	// Pull the SDA line low to send ACK
 	USISR = I2C_ACK_USISR;			// Set counter to overflow in 1 clock
 	while(GET_USIOIF==0);			// Wait for overflow
-	//PORTB &= ~_BV(PB3);//DEBUG
-	DDRB  &= ~_BV(I2C_SDA);			// Set the direction to input
+	I2C_SET_SDA_INPUT()				// Set the direction to input
 	USISR = I2C_BYTE_USISR;			// Reset counter to 0
 }
 
 
-uint8_t i2c_receive_data(uint8_t * buf)
+uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
 {
 	uint8_t usi_data;
 	uint8_t len = 0;
-	buf = &i2c_rec_buff[0];
 	
-	while(GET_USISIF==0);			// Wait for start bit (address bit is received)
+	// ================= Start sequence =================
 	
-	while((PINB & _BV(I2C_SCL)) && !(PINB & _BV(I2C_SDA)));
+	while(GET_USISIF==0);										// Wait for start bit (address bit is received)
+	while((PINB & _BV(I2C_SCL)) && !(PINB & _BV(I2C_SDA)));		// Wait for SCL to go high and SDA to go low
+	USISR = I2C_CLR_START_USISR;							    // Acknowledge Start bit and reset SCL counter
 	
-	USISR = I2C_START_USISR;
+	// ================= Verify I2C Address =================
 	
 	while(GET_USIOIF==0);			// Wait for counter overflow
-	
-	//PORTB |= _BV(PB3);//DEBUG
-
 	usi_data = USIDR>>1;			// Save Address
-	
-	//plotValue(usi_data);
-	
-	//USISR = _BV(USISIF) | _BV(USIOIF);
-	//i2c_ack();
-
-	//return 0;
 	
 	if((usi_data) == I2C_ADDRESS)	// Verify I2C address
 	{
@@ -268,20 +244,18 @@ uint8_t i2c_receive_data(uint8_t * buf)
 	}
 	else
 	{
-		USISR = I2C_BYTE_USISR;		// Clear any bits and set counter back to 0 for next session
+		USISR = I2C_SET_START_USISR;// Clear any bits and set counter back to 0 for next session
 		return 0;					// This message was not for us
 	}
 	
-	// Receive Data loop
-	while(GET_USIPF == 0)			// Continue until we get the stop bit
-	{
+	// ===================== Receive Data =====================
+	
+	while(len < size)				// Unfortunately waiting for a stop bit never happens, 
+	{								// so we hard code check the length here instead
 		while(GET_USIOIF==0);		// Wait for counter overflow
-
-		i2c_rec_buff[len++] = USIDR;// Received data stored in buffer
-		USISR |= _BV(USIOIF);		// Clear overflow flag
+		buf[len++] = USIDR;			// Received data stored in buffer
 		i2c_ack();					// Send acknowledge bit
 	}
 	
-	USISR = I2C_BYTE_USISR;			// Clear any bits and set counter back to 0 for next session
 	return len;
 }
