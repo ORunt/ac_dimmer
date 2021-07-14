@@ -123,25 +123,25 @@ void exti_init(void)
 int main(void)
 {
 	uint8_t buf[I2C_PACKET_SIZE] = {0};
+	uint8_t len = 0;
 		
 	//setupSystemClock(CLK_PSC_1);	// If DIV8 fuse is not removed, then add this line
-	gpio_init();
-	timer_init();
-	exti_init();
+	//gpio_init();
+	//timer_init();
+	//exti_init();
+	setPinOutput(PB3);
+	resetPin(PB3);
 	i2c_init();
 	enableGlobalInterrupts(true);
 	
     while(1)
     {
-	    i2c_receive_data(&buf[0], I2C_PACKET_SIZE);
-
-		switch (buf[0])
+	    len = i2c_receive_data(&buf[0], I2C_PACKET_SIZE);
+		
+		if(len == I2C_PACKET_SIZE)
 		{
-			case 0: light_store[0].dim_buf = buf[1]; break;	// Light 1
-			//case 1: light_store[1].dim_buf = buf[1]; break;	// Light 2
-			//case 2: light_store[2].dim_buf = buf[1]; break;	// Light 3
-			default: break;
+			light_store[buf[0]].dim_buf = buf[1];
 		}
+		
     }
 }
-

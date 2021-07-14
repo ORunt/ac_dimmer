@@ -183,11 +183,17 @@ void resetPin(uint8_t pin)
 #define I2C_SET_SDA_OUTPUT()	{ DDRB |=  _BV(I2C_SDA); }
 #define I2C_SET_SDA_INPUT() 	{ DDRB &= ~_BV(I2C_SDA); }
 #define I2C_SET_BOTH_INPUT() 	{ DDRB &= ~(_BV(I2C_SDA) | _BV(I2C_SCL)); }
+#define I2C_WAIT_START_SETTLE()	{while((PINB & _BV(I2C_SCL)) && !(PINB & _BV(I2C_SDA)));}
 
 #define I2C_ACK_USISR			0x7E	// Counts one clock (ACK)
 #define I2C_BYTE_USISR			0x70	// Counts 8 clocks (BYTE)
 #define I2C_CLR_START_USISR		0xF0	// Clears START flag
 #define I2C_SET_START_USISR		0x70	// Sets START flag
+
+// Interrupt defines
+#define I2C_SET_START_COND_USICR		0b10101000
+#define I2C_STOP_DID_OCCUR_USICR		0b10111000
+#define I2C_STOP_NOT_OCCUR_USICR		0b11101000
 
 
 void plotValue(uint8_t val)
@@ -200,6 +206,123 @@ void plotValue(uint8_t val)
 	}
 	PORTB &= ~_BV(PB3);
 }
+
+#define I2C_INTERRUPT_BASED
+#ifdef I2C_INTERRUPT_BASED
+
+typedef enum{
+	USI_SLAVE_CHECK_ADDRESS,
+	USI_SLAVE_RECV_DATA_WAIT,
+	USI_SLAVE_RECV_DATA_ACK_SEND
+}I2C_state_e;
+
+#define DATA_BUF_LEN	 4
+#define DATA_RECEIVED	 1
+#define DATA_PENDING	 0
+#define DATA_TERMINATED	-1
+
+I2C_state_e i2c_state;
+volatile int8_t i2c_data_received = DATA_TERMINATED;
+volatile uint8_t i2c_data = 0;
+
+void i2c_init(void)
+{
+	USICR = _BV(USISIE) | _BV(USIWM1) | _BV(USICS1);	// I2C Slave mode Start bit interrupt enabled
+	I2C_SET_BOTH_INPUT() 								// SDA & SCL direction as input
+	USISR = I2C_CLR_START_USISR;						// Counter value (counts SCL pulses)
+}
+
+ISR(USI_START_vect)
+{
+	i2c_state = USI_SLAVE_CHECK_ADDRESS;
+	I2C_SET_SDA_INPUT()
+	I2C_WAIT_START_SETTLE()
+	if(!(PINB & _BV(I2C_SDA))){
+		// a Stop Condition did not occur
+		USICR = I2C_STOP_NOT_OCCUR_USICR;
+	}
+	else{
+		// a Stop Condition did occur
+		USICR = I2C_STOP_DID_OCCUR_USICR;
+	}
+	USISR = I2C_CLR_START_USISR;
+	i2c_data_received = DATA_TERMINATED;
+}
+
+ISR(USI_OVF_vect)
+{
+	//setPin(PB3); // DEBUG
+	switch (i2c_state)
+	{
+		case USI_SLAVE_CHECK_ADDRESS:
+		{
+			if((USIDR == 0) || ((USIDR >> 1) == I2C_ADDRESS))
+			{
+				i2c_data_received = DATA_PENDING;
+				i2c_state = USI_SLAVE_RECV_DATA_WAIT;
+
+				//Set USI to send ACK
+				USIDR = 0;
+				I2C_SET_SDA_OUTPUT()
+				USISR = I2C_ACK_USISR;
+			}
+			else
+			{
+				//Set USI to Start Condition Mode
+				USICR = I2C_SET_START_COND_USICR;
+				USISR = I2C_SET_START_USISR;
+			}
+			break;
+		}
+
+		case USI_SLAVE_RECV_DATA_WAIT:
+		{
+			i2c_state = USI_SLAVE_RECV_DATA_ACK_SEND;
+
+			I2C_SET_SDA_INPUT()
+			USISR = I2C_BYTE_USISR;
+			break;
+		}
+		
+		case USI_SLAVE_RECV_DATA_ACK_SEND:
+		{
+			i2c_state = USI_SLAVE_RECV_DATA_WAIT;
+			
+			if(i2c_data_received == DATA_PENDING)
+			{
+				i2c_data = USIDR;
+				i2c_data_received = DATA_RECEIVED;
+			}
+		
+			USIDR = 0;
+			I2C_SET_SDA_OUTPUT()
+			USISR = I2C_ACK_USISR;
+			break;
+		}
+	}
+}
+
+uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
+{
+	uint8_t offset = 0;
+	
+	while(offset < size)
+	{
+		if(i2c_data_received == DATA_RECEIVED)
+		{
+			buf[offset++] = i2c_data;
+			i2c_data_received = DATA_PENDING;
+		}
+		else if (i2c_data_received == DATA_TERMINATED)
+		{
+			return offset;
+		}
+	}
+	return offset;
+}
+
+
+#else
 
 
 void i2c_init(void)
@@ -229,9 +352,9 @@ uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
 	
 	// ================= Start sequence =================
 	
-	while(GET_USISIF==0);										// Wait for start bit (address bit is received)
-	while((PINB & _BV(I2C_SCL)) && !(PINB & _BV(I2C_SDA)));		// Wait for SCL to go high and SDA to go low
-	USISR = I2C_CLR_START_USISR;							    // Acknowledge Start bit and reset SCL counter
+	while(GET_USISIF==0);			// Wait for start bit (address bit is received)
+	I2C_WAIT_START_SETTLE()			// Wait for SCL to go high and SDA to go low
+	USISR = I2C_CLR_START_USISR;	// Acknowledge Start bit and reset SCL counter
 	
 	// ================= Verify I2C Address =================
 	
@@ -259,3 +382,5 @@ uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
 	
 	return len;
 }
+
+#endif
