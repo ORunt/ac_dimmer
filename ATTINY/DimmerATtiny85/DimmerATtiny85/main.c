@@ -134,11 +134,17 @@ void exti_init(void)
 
 int main(void)
 {
-	gpio_init();
-	timer_init();
-	exti_init();
+	//setupSystemClock(CLK_PSC_1);
+	//gpio_init();
+	//timer_init();
+	//exti_init();
+	
+	//setPinOutput(PB3);
+	DDRB = _BV(PB3);
+	PORTB = 0x00;
+	//resetPin(PB3);
 	i2c_init();
-	enableGlobalInterrupts(true);
+	//enableGlobalInterrupts(true);
 	
     while(1)
     {
@@ -146,13 +152,13 @@ int main(void)
 
 	    i2c_receive_data(&buf[0]);
 
-		switch (buf[0])
+		/*switch (buf[0])
 		{
 			case 0: light_store[0].dim_buf = buf[1]; break;	// Light 1
-			/*case 1: light_store[1].dim_buf = buf[1]; break;	// Light 2
-			case 2: light_store[2].dim_buf = buf[1]; break;	// Light 3*/
+			case 1: light_store[1].dim_buf = buf[1]; break;	// Light 2
+			case 2: light_store[2].dim_buf = buf[1]; break;	// Light 3
 			default: break;
-		}
+		}*/
     }
 }
 
