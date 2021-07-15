@@ -126,11 +126,9 @@ int main(void)
 	uint8_t len = 0;
 		
 	//setupSystemClock(CLK_PSC_1);	// If DIV8 fuse is not removed, then add this line
-	//gpio_init();
-	//timer_init();
-	//exti_init();
-	setPinOutput(PB3);
-	resetPin(PB3);
+	gpio_init();
+	timer_init();
+	exti_init();
 	i2c_init();
 	enableGlobalInterrupts(true);
 	

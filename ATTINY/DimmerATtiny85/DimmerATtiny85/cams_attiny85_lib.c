@@ -167,7 +167,7 @@ void setPin(uint8_t pin)
 
 void resetPin(uint8_t pin)
 {
-	PORTB &= ~_BV(pin);
+	PORTB = PINB & ~_BV(pin);
 }
 
 // ============== I2C ==============
@@ -183,7 +183,7 @@ void resetPin(uint8_t pin)
 #define I2C_SET_SDA_OUTPUT()	{ DDRB |=  _BV(I2C_SDA); }
 #define I2C_SET_SDA_INPUT() 	{ DDRB &= ~_BV(I2C_SDA); }
 #define I2C_SET_BOTH_INPUT() 	{ DDRB &= ~(_BV(I2C_SDA) | _BV(I2C_SCL)); }
-#define I2C_WAIT_START_SETTLE()	{while((PINB & _BV(I2C_SCL)) && !(PINB & _BV(I2C_SDA)));}
+#define I2C_WAIT_START_SETTLE()	while((PINB & _BV(I2C_SCL)) && !(PINB & _BV(I2C_SDA)));
 
 #define I2C_ACK_USISR			0x7E	// Counts one clock (ACK)
 #define I2C_BYTE_USISR			0x70	// Counts 8 clocks (BYTE)
@@ -224,6 +224,7 @@ typedef enum{
 I2C_state_e i2c_state;
 volatile int8_t i2c_data_received = DATA_TERMINATED;
 volatile uint8_t i2c_data = 0;
+//volatile uint8_t transmition_started = 0;
 
 void i2c_init(void)
 {
@@ -251,12 +252,12 @@ ISR(USI_START_vect)
 
 ISR(USI_OVF_vect)
 {
-	//setPin(PB3); // DEBUG
 	switch (i2c_state)
 	{
 		case USI_SLAVE_CHECK_ADDRESS:
 		{
-			if((USIDR == 0) || ((USIDR >> 1) == I2C_ADDRESS))
+			//transmition_started = 1;
+			if((USIDR >> 1) == I2C_ADDRESS)
 			{
 				i2c_data_received = DATA_PENDING;
 				i2c_state = USI_SLAVE_RECV_DATA_WAIT;
@@ -281,6 +282,7 @@ ISR(USI_OVF_vect)
 
 			I2C_SET_SDA_INPUT()
 			USISR = I2C_BYTE_USISR;
+			//transmition_started = 0;
 			break;
 		}
 		
@@ -305,6 +307,7 @@ ISR(USI_OVF_vect)
 uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
 {
 	uint8_t offset = 0;
+	//uint32_t cnt = 0;
 	
 	while(offset < size)
 	{
@@ -317,12 +320,20 @@ uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
 		{
 			return offset;
 		}
+		/*if(transmition_started)
+			cnt++;
+		else
+			cnt = 0;
+		if(cnt > 8000000UL)
+			I2C_SET_BOTH_INPUT()*/
 	}
 	return offset;
 }
 
 
 #else
+
+#define SAFE_WAIT_OVF()	{uint32_t _cnt; while(GET_USIOIF==0){if(_cnt++ > 1000000)return;}}
 
 
 void i2c_init(void)
