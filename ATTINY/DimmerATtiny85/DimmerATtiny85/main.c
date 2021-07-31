@@ -7,15 +7,16 @@
 
 #include "cams_attiny85_lib.h"
 
-#define LIGHTS				1
+#define LIGHTS				2
 
 #define AC_DIM_MIN_PERCENT	20
 #define AC_DIM_MAX_PERCENT	95
 
-#define LIGHT_PIN_0			4
-#define LIGHT_PIN_1			1
-#define LIGHT_PIN_2			2
-#define ZERO_CROSS_PIN		3
+#define LIGHT_PIN_0			PB4
+#define LIGHT_PIN_1			PB1
+#define LIGHT_PIN_2			PB5
+#define ZERO_CROSS_PIN		PB3
+// I2C pins use PB0 and PB2
 
 #define I2C_PACKET_SIZE		2	// excluding the address
 
@@ -138,7 +139,10 @@ int main(void)
 		
 		if(len == I2C_PACKET_SIZE)
 		{
-			light_store[buf[0]].dim_buf = buf[1];
+			if(buf[0] < LIGHTS)
+			{
+				light_store[buf[0]].dim_buf = buf[1];
+			}
 		}
 		
     }

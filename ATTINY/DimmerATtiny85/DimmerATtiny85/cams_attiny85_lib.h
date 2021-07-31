@@ -18,8 +18,8 @@ typedef char bool;
 #define true	1
 #define false	0
 
-#define SYS_CLK	8000000UL	// 8MHz
-#define F_CPU	8000000UL	// 8MHz
+#define SYS_CLK	16000000UL	// 16MHz
+#define F_CPU	16000000UL	// 16MHz
 #define PRESCALER	1024
 
 // ============== Clock ==============

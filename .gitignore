@@ -1,5 +1,16 @@
-Objects/*
+*/Objects/*
 Listings/*
 DebugConfig/*
 *.uvguix.*
 *.scvd
+*Debug*
+*Release*
+*/DebugConfig/*
+*.d
+*.o
+*.hex
+*.lss
+*.map
+*.eep
+*.elf
+*.axf
