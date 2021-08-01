@@ -18,11 +18,14 @@ typedef char bool;
 #define true    1
 #define false   0
 
-#define SYS_CLK     16000000UL    // 16MHz
-#define F_CPU       16000000UL    // 16MHz
+#define SYS_CLK     20000000UL    // 20MHz (overclocked)
+#define F_CPU       20000000UL    // 20MHz (overclocked)
 #define PRESCALER   1024
 
 // ============== Clock ==============
+
+#define overclock() OSCCAL = 172
+
 typedef enum{
     CLK_PSC_1 = 0,
     CLK_PSC_2,
@@ -80,6 +83,7 @@ typedef void (*InterruptFunction)(uint8_t num);
 
 void setupSystemClock(CLK_PSC_e prescaler);
 uint32_t getSystemClockHz(void);
+void calibrateClockTest(void);
 void InitialiseTimer(TIMx_e timer, InterruptFunction attach_interrupt);
 void SetTimerCompare(TIMx_e timer, uint8_t compare_value);
 void ResetAllCounters(void);

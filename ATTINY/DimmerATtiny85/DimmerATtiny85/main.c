@@ -7,7 +7,7 @@
 
 #include "cams_attiny85_lib.h"
 
-#define LIGHTS              2
+#define LIGHTS              3
 
 #define AC_DIM_MIN_PERCENT  20
 #define AC_DIM_MAX_PERCENT  95
@@ -28,17 +28,25 @@ typedef struct{
 
 volatile light_store_t light_store[LIGHTS] = {0};
 
-// Dim value between 0 (off) and 100 (max)
+
+/*
+ * Calculates the timer output compare value from the Dim percentage passed in
+ * @param dim: Dim value between 0 (off) and 100 (max)
+ */
 uint8_t Calc_Dim_CCR(uint32_t dim)
 {
-    dim = (dim < 100) ? dim : 100;
+    dim = (dim < 100) ? dim : 100;  // Check limits
     // 10ms is max brightness
-    //uint32_t t_cnt_ns = (AC_DIM_PRESCALER + 1) * 1000000000 / SystemCoreClock; // In ns
-    //return dim * 100000 / t_cnt_ns;
+    // uint32_t t_cnt_ns = (AC_DIM_PRESCALER + 1) * 1000000000 / SystemCoreClock; // In ns
+    // return dim * 100000 / t_cnt_ns;
 
     return (uint8_t)(((100 - dim) * F_CPU) / (PRESCALER * 10000UL));
 }
 
+
+/*
+ * Utility function that maps a counter value to the pin out value on port B
+ */
 uint8_t map_pin(uint8_t pin)
 {
     switch(pin)
@@ -50,6 +58,10 @@ uint8_t map_pin(uint8_t pin)
     }
 }
 
+
+/*
+ * Interrupt function for when an output compare on the timers happens, this sets the PWM duty cycle
+ */
 void isr_light(uint8_t num)
 {
     if(light_store[num].zero_cross)
@@ -69,11 +81,14 @@ void isr_light(uint8_t num)
     }
 }
 
+/*
+ * Interrupt function for when a zero cross gets triggered
+ */
 void isr_zeroCross(uint8_t num)
 {
     int i;
     
-    // Make sure all zero cross's have been cleared
+    // Make sure if all zero cross's has been cleared (prevents multiple interrupts for same zero cross)
     for (i = 0; i < LIGHTS; i++){
         if(light_store[i].zero_cross){
             return;
@@ -96,6 +111,9 @@ void isr_zeroCross(uint8_t num)
     ResetAllCounters();
 }
 
+/*
+ * Initialize the timers for output compare
+ */
 void timer_init(void)
 {
     int i;
@@ -105,6 +123,10 @@ void timer_init(void)
     }
 }
 
+
+/*
+ * Initialize the GPIO outputs that the PWM will output to
+ */
 void gpio_init(void)
 {
     int i;
@@ -112,9 +134,14 @@ void gpio_init(void)
     for(i = 0; i < LIGHTS; i++){
         setPinOutput(map_pin(i));
         resetPin(map_pin(i));
+        light_store[i].dim_buf = AC_DIM_MIN_PERCENT - 1;
     }
 }
 
+
+/*
+ * Initialize the zero cross interrupt
+ */
 void exti_init(void)
 {
     initialiseExternalInterrupt(ZERO_CROSS_PIN, isr_zeroCross);
@@ -125,23 +152,27 @@ int main(void)
 {
     uint8_t buf[I2C_PACKET_SIZE] = {0};
     uint8_t len = 0;
+    uint8_t light_val = 0;
         
-    //setupSystemClock(CLK_PSC_1);    // If DIV8 fuse is not removed, then add this line
-    gpio_init();
-    timer_init();
-    exti_init();
-    i2c_init();
-    enableGlobalInterrupts(true);
+    overclock();                        // Over-clock the system clock to 20Mhz
+    gpio_init();                        // Initialize the GPIO outputs that the PWM will output to
+    timer_init();                       // Initialize the timers for output compare
+    exti_init();                        // Initialize the zero cross interrupt
+    i2c_init();                         // Initialize the I2C comms
+    enableGlobalInterrupts(true);       // Enable global interrupts
     
     while(1)
     {
+        // If I2C data is being transmitted, we stay in this function until the whole packet is received
         len = i2c_receive_data(&buf[0], I2C_PACKET_SIZE);
         
         if(len == I2C_PACKET_SIZE)
         {
-            if(buf[0] < LIGHTS)
+            if(buf[0] < LIGHTS) // Make sure we don't overflow the light_store array
             {
-                light_store[buf[0]].dim_buf = buf[1];
+                light_val = (buf[1] > AC_DIM_MAX_PERCENT) ? AC_DIM_MAX_PERCENT + 1 : buf[1];    // Check for max - we don't want to exceed these, otherwise the interrupts might happen out of order
+                light_val = (buf[1] < AC_DIM_MIN_PERCENT) ? AC_DIM_MIN_PERCENT - 1 : light_val; // Check for min - we don't want to exceed these, otherwise the interrupts might happen out of order
+                light_store[buf[0]].dim_buf = light_val;                                        // The light_store is serviced in the interrupts
             }
         }
     }

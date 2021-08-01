@@ -24,6 +24,16 @@ uint32_t getSystemClockHz(void)
     return SYS_CLK / system_prescaler;
 }
 
+void calibrateClockTest(void)
+{
+    overclock();                    // This value is that value to be calibrated. Get it as close as possible to 10Mhz with PLL enabled.
+    TCCR1 = _BV(CTC1) | _BV(CS10);  // CTC mode, /1
+    GTCCR = _BV(COM1B0);            // Toggle OC1B
+    PLLCSR = 0<<PCKE;               // System clock as clock source
+    OCR1C = 0;
+    setPinOutput(PB4);
+}
+
 // ============== Timer ==============
 
 InterruptFunction INT_FUNC_tim0_OCA = NULL;
@@ -224,7 +234,6 @@ typedef enum{
 I2C_state_e i2c_state;
 volatile int8_t i2c_data_received = DATA_TERMINATED;
 volatile uint8_t i2c_data = 0;
-//volatile uint8_t transmition_started = 0;
 
 void i2c_init(void)
 {
@@ -307,7 +316,6 @@ ISR(USI_OVF_vect)
 uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
 {
     uint8_t offset = 0;
-    //uint32_t cnt = 0;
     
     while(offset < size)
     {
@@ -320,12 +328,6 @@ uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
         {
             return offset;
         }
-        /*if(transmition_started)
-            cnt++;
-        else
-            cnt = 0;
-        if(cnt > 8000000UL)
-            I2C_SET_BOTH_INPUT()*/
     }
     return offset;
 }
