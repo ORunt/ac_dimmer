@@ -1,0 +1,45 @@
+===========================================================================================================
+The ATTINY85 has some limitations, so we need to boost this puppy until it is overclocked to its max!
+
+The standard ATTINY85 is shipped with the internal oscillator clock - running at 8Mhz - then prescaled
+by default to 1Mhz. This is far too slow when running one PWM channel with I2C at the same time.
+
+This setup will boost the default clock to 20Mhz, which seems to be sufficient for 3 PWM's and I2C
+comms at the same time.
+
+Fuse Setup:
+1. Open the project in Microchip Studio then go to "tools->Device Programming" or Ctrl+Shift+P
+2. Click Apply when your programming tool is selected
+3. Go to the Fuses tab
+4. uncheck LOW.CKDIV8 (this prescales the sys clock by 8 on startup)
+5. in LOW.SUT_CKSEL, select "PLL Clock; Start-up time PWRDWN/RESET: 1K CK/14 CK + 4 ms"
+6. Click program
+
+This will set the default clock to 16Mhz now
+
+7. In the code there us a function called calibrateClockTest()
+   Call this in main():
+
+void main(void)
+{
+    calibrateClockTest();
+    while(1);
+}
+
+8. Change the OSCCAL value to somewhere around 172 then program the chip
+9. Connect PB4 to an oscilliscope or frequency measurer to measure the frequency
+10. Repeat steps 8 and 9 until the frequency is as close to 10Mhz as possible
+
+With the overclock(); function called in main and the OSCCAL value calibrated, this should
+now have our clock running at 20Mhz!!
+
+===========================================================================================================
+If 3 lights are required, PB5 is used as the 3rd PWM output. This is also the RESET pin.
+Once everything is setup nicely, we can force PB5 to disable the pin being RESET and will become an output soley.
+
+WARNING: after setting this fuse you won't be able to program this chip any more (unless you use a high voltage
+programmer). So do this last, after everything else has been setup and is working!
+
+Fuse Setup:
+1. check HIGH.RSTDISBL
+2. click program
