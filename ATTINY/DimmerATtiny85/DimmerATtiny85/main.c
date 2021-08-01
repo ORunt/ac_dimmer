@@ -7,17 +7,19 @@
 
 #include "cams_attiny85_lib.h"
 
-#define LIGHTS              3
+#define LIGHTS              3   // Set how many output lights are needed (1 - 3)
 
-#define AC_DIM_MIN_PERCENT  20
-#define AC_DIM_MAX_PERCENT  95
+#define AC_DIM_MIN_PERCENT  20  // The min percent before the light stays off
+#define AC_DIM_MAX_PERCENT  95  // The max percent before the light stays on
 
+// The pin outs for the Light PWM and zero cross pin
+// DO NOT USE: PB0 and PB2. I2C uses these pins
 #define LIGHT_PIN_0         PB4
 #define LIGHT_PIN_1         PB1
 #define LIGHT_PIN_2         PB5
 #define ZERO_CROSS_PIN      PB3
-// I2C pins use PB0 and PB2
 
+// The I2C packet structure : [0x6A (Address), light_number (0 - 2), dim_value (0 - 100)]
 #define I2C_PACKET_SIZE     2    // excluding the address
 
 typedef struct{
@@ -25,6 +27,7 @@ typedef struct{
     uint8_t dim_trans_buf;  // The current dim value
     uint8_t dim_buf;        // The next dim value
 }light_store_t;
+
 
 volatile light_store_t light_store[LIGHTS] = {0};
 
@@ -110,6 +113,7 @@ void isr_zeroCross(uint8_t num)
     // Start the counter from 0 again
     ResetAllCounters();
 }
+
 
 /*
  * Initialize the timers for output compare
