@@ -24,7 +24,7 @@ typedef char bool;
 
 // ============== Clock ==============
 
-#define overclock() OSCCAL = 172
+#define overclock() OSCCAL = 163
 
 typedef enum{
     CLK_PSC_1 = 0,
@@ -37,6 +37,19 @@ typedef enum{
     CLK_PSC_128,
     CLK_PSC_256,
 }CLK_PSC_e;
+
+// ============= Watchdog ==============
+#define WDT_16ms    0x00
+#define WDT_32ms    0x01
+#define WDT_64ms    0x02
+#define WDT_125ms   0x03
+#define WDT_250ms   0x04
+#define WDT_500ms   0x05
+#define WDT_1s      0x06
+#define WDT_2s      0x07
+#define WDT_4s      0x20
+#define WDT_8s      0x21
+
 
 // ============== Timer ==============
 typedef enum{
@@ -84,6 +97,8 @@ typedef void (*InterruptFunction)(uint8_t num);
 void setupSystemClock(CLK_PSC_e prescaler);
 uint32_t getSystemClockHz(void);
 void calibrateClockTest(void);
+void watchdogSetup(void);
+void feedWatchdog(void);
 void InitialiseTimer(TIMx_e timer, InterruptFunction attach_interrupt);
 void SetTimerCompare(TIMx_e timer, uint8_t compare_value);
 void ResetAllCounters(void);
@@ -92,6 +107,7 @@ void enableGlobalInterrupts(bool enable);
 void setPinOutput(uint8_t pin);
 void setPin(uint8_t pin);
 void resetPin(uint8_t pin);
+void pulsePin(uint8_t pin);
 void i2c_init(void);
 uint8_t i2c_receive_data(uint8_t * buf, uint8_t size);
 void plotValue(uint8_t val);

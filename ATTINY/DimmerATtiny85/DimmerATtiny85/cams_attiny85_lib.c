@@ -34,6 +34,25 @@ void calibrateClockTest(void)
     setPinOutput(PB4);
 }
 
+// ============= Watchdog ============
+void watchdogSetup(void)
+{
+    MCUSR = 0x00;                   // NB. MCUSR must be zeroed or watchdog will keep rebooting
+    WDTCR |= (1<<WDCE)|(1<<WDE);
+    WDTCR = 0x00;                   // disable watchdog
+    WDTCR = WDT_32ms;               // Set watchdog timeout to 32ms;
+    WDTCR |= (1 << WDE) | 
+            (1 << WDIE);            // Set watchdog timer mode as BOTH WDE (reboot) and WDIE (ISR-interrupt)
+}
+
+void feedWatchdog(void)
+{
+    WDTCR |= (1<<WDIE);             // feed the watchdog
+}
+
+ISR(WDT_vect) { WDTCR |= (1<<WDE);} // reset WDE (but don't reset "WDIE" here, only do that in main loop as the "feed watchdog" command)
+                                    // ie. if WDIE not set in main loop, then next trigger of WDE will re-boot the ATTiny instead of calling this ISR
+
 // ============== Timer ==============
 
 InterruptFunction INT_FUNC_tim0_OCA = NULL;
@@ -180,6 +199,15 @@ void resetPin(uint8_t pin)
     PORTB = PINB & ~_BV(pin);
 }
 
+void pulsePin(uint8_t pin)
+{
+    uint8_t j;
+    setPin(pin);
+    for (j=0; j<10; j++){__asm__("nop");}
+    resetPin(pin);
+    for (j=0; j<10; j++){__asm__("nop");}
+}
+
 // ============== I2C ==============
 
 #define I2C_SCL            PB2
@@ -223,7 +251,8 @@ void plotValue(uint8_t val)
 typedef enum{
     USI_SLAVE_CHECK_ADDRESS,
     USI_SLAVE_RECV_DATA_WAIT,
-    USI_SLAVE_RECV_DATA_ACK_SEND
+    USI_SLAVE_RECV_DATA_ACK_SEND,
+    USI_SLAVE_NONE
 }I2C_state_e;
 
 #define DATA_BUF_LEN        4
@@ -287,6 +316,12 @@ ISR(USI_OVF_vect)
 
         case USI_SLAVE_RECV_DATA_WAIT:
         {
+            if(i2c_data_received == DATA_TERMINATED)
+            {
+                i2c_init();
+                i2c_state = USI_SLAVE_NONE;
+                return;
+            }
             i2c_state = USI_SLAVE_RECV_DATA_ACK_SEND;
 
             I2C_SET_SDA_INPUT()
@@ -310,6 +345,10 @@ ISR(USI_OVF_vect)
             USISR = I2C_ACK_USISR;
             break;
         }
+        case USI_SLAVE_NONE:
+        {
+            i2c_init();
+        }
     }
 }
 
@@ -328,6 +367,10 @@ uint8_t i2c_receive_data(uint8_t * buf, uint8_t size)
         {
             return offset;
         }
+    }
+    if(offset == size)
+    {
+        i2c_data_received = DATA_TERMINATED;
     }
     return offset;
 }

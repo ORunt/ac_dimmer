@@ -7,7 +7,7 @@
 
 #include "cams_attiny85_lib.h"
 
-#define LIGHTS              3   // Set how many output lights are needed (1 - 3)
+#define LIGHTS              1   // Set how many output lights are needed (1 - 3)
 
 #define AC_DIM_MIN_PERCENT  20  // The min percent before the light stays off
 #define AC_DIM_MAX_PERCENT  95  // The max percent before the light stays on
@@ -17,7 +17,7 @@
 #define LIGHT_PIN_0         PB4
 #define LIGHT_PIN_1         PB1
 #define LIGHT_PIN_2         PB5
-#define ZERO_CROSS_PIN      PB3
+#define ZERO_CROSS_PIN      PB3 // PB1 for lounge light
 
 // The I2C packet structure : [0x6A (Address), light_number (0 - 2), dim_value (0 - 100)]
 #define I2C_PACKET_SIZE     2    // excluding the address
@@ -157,7 +157,8 @@ int main(void)
     uint8_t buf[I2C_PACKET_SIZE] = {0};
     uint8_t len = 0;
     uint8_t light_val = 0;
-        
+    
+    watchdogSetup();                    // Initialize the watchdog
     overclock();                        // Over-clock the system clock to 20Mhz
     gpio_init();                        // Initialize the GPIO outputs that the PWM will output to
     timer_init();                       // Initialize the timers for output compare
@@ -179,5 +180,6 @@ int main(void)
                 light_store[buf[0]].dim_buf = light_val;                                        // The light_store is serviced in the interrupts
             }
         }
+        feedWatchdog();
     }
 }
